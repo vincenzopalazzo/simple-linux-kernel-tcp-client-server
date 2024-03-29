@@ -1,6 +1,6 @@
 ifneq ($(KERNELRELEASE),)
 	obj-m += network_client.o
-#	obj-m += network_server.o
+	obj-m += network_server.o
 # Otherwise we were called directly from the command
 # line; invoke the kernel build system.
 else

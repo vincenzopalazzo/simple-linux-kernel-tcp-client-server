@@ -9,14 +9,13 @@
 #include <linux/uaccess.h>
 #include <linux/socket.h>
 #include <linux/slab.h>
+#include "network_comm.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aby Sam Ross, Vincenzo Palazzo");
 
 // FIXME: use a module argument or a modern version to pass this
 #define PORT 2325
-#define BUFFER_SIZE 49
-#define BUFFER_LEN 50
 
 struct socket *conn_socket = NULL;
 
@@ -44,8 +43,8 @@ static int tcp_client_send(struct socket *sock, const char *buf,
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
         /*
-        msg.msg_iov     = &iov;
-        msg.msg_iovlen  = 1;
+          msg.msg_iov     = &iov;
+          msg.msg_iovlen  = 1;
         */
         msg.msg_control = NULL;
         msg.msg_controllen = 0;
@@ -53,8 +52,8 @@ static int tcp_client_send(struct socket *sock, const char *buf,
 
 repeat_send:
         /*
-        msg.msg_iov->iov_len  = left;
-        msg.msg_iov->iov_base = (char *)buf + written; 
+          msg.msg_iov->iov_len  = left;
+          msg.msg_iov->iov_base = (char *)buf + written;
         */
         vec.iov_len = left;
         vec.iov_base = (char *)buf + written;
@@ -62,10 +61,9 @@ repeat_send:
         //len = sock_sendmsg(sock, &msg, left);
         len = kernel_sendmsg(sock, &msg, &vec, left, left);
         if((len == -ERESTARTSYS) || (!(flags & MSG_DONTWAIT) &&\
-                                (len == -EAGAIN)))
+                                     (len == -EAGAIN)))
                 goto repeat_send;
-        if(len > 0)
-        {
+        if(len > 0) {
                 written += len;
                 left -= len;
                 if(left)
@@ -87,15 +85,15 @@ static int tcp_client_receive(struct socket *sock, char *str,
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
         /*
-        msg.msg_iov     = &iov;
-        msg.msg_iovlen  = 1;
+          msg.msg_iov     = &iov;
+          msg.msg_iovlen  = 1;
         */
         msg.msg_control = NULL;
         msg.msg_controllen = 0;
         msg.msg_flags   = flags;
         /*
-        msg.msg_iov->iov_base   = str;
-        msg.msg_ioc->iov_len    = max_size; 
+          msg.msg_iov->iov_base   = str;
+          msg.msg_ioc->iov_len    = max_size;
         */
         vec.iov_len = max_size;
         vec.iov_base = str;
@@ -105,8 +103,7 @@ read_again:
         //len = sock_recvmsg(sock, &msg, max_size, 0); 
         len = kernel_recvmsg(sock, &msg, &vec, max_size, max_size, flags);
 
-        if(len == -EAGAIN || len == -ERESTARTSYS)
-        {
+        if(len == -EAGAIN || len == -ERESTARTSYS) {
                 pr_info(" *** mtp | error while reading: %d | "
                         "tcp_client_receive *** \n", len);
 
@@ -122,13 +119,13 @@ static int tcp_client_connect(void)
 {
         struct sockaddr_in saddr;
         /*
-        struct sockaddr_in daddr;
-        struct socket *data_socket = NULL;
+          struct sockaddr_in daddr;
+          struct socket *data_socket = NULL;
         */
-        unsigned char destip[5] = {10,129,41,200,'\0'};
+        unsigned char destip[5] = {127,0,0,1,'\0'};
         /*
-        char *response = kmalloc(4096, GFP_KERNEL);
-        char *reply = kmalloc(4096, GFP_KERNEL);
+          char *response = kmalloc(4096, GFP_KERNEL);
+          char *reply = kmalloc(4096, GFP_KERNEL);
         */
         int len = BUFFER_SIZE;
         char response[BUFFER_LEN];
@@ -139,8 +136,7 @@ static int tcp_client_connect(void)
         DECLARE_WAIT_QUEUE_HEAD(recv_wait);
         
         ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &conn_socket);
-        if(ret < 0)
-        {
+        if(ret < 0) {
                 pr_info(" *** mtp | Error: %d while creating first socket. | "
                         "setup_connection *** \n", ret);
                 goto err;
@@ -152,9 +148,8 @@ static int tcp_client_connect(void)
         saddr.sin_addr.s_addr = htonl(create_address(destip));
 
         ret = conn_socket->ops->connect(conn_socket, (struct sockaddr *)&saddr\
-                        , sizeof(saddr), O_RDWR);
-        if(ret && (ret != -EINPROGRESS))
-        {
+                                        , sizeof(saddr), O_RDWR);
+        if(ret && (ret != -EINPROGRESS)) {
                 pr_info(" *** mtp | Error: %d while connecting using conn "
                         "socket. | setup_connection *** \n", ret);
                 goto err;
@@ -165,30 +160,12 @@ static int tcp_client_connect(void)
         tcp_client_send(conn_socket, reply, strlen(reply), MSG_DONTWAIT);
 
         wait_event_timeout(recv_wait,\
-                        !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                                                                        5*HZ);
-        /*
-        add_wait_queue(&conn_socket->sk->sk_wq->wait, &recv_wait);
-        while(1)
-        {
-                __set_current_status(TASK_INTERRUPTIBLE);
-                schedule_timeout(HZ);
-        */
-                if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))
-                {
-                        /*
-                        __set_current_status(TASK_RUNNING);
-                        remove_wait_queue(&conn_socket->sk->sk_wq->wait,\
-                                                              &recv_wait);
-                        */
-                        memset(&response, 0, len+1);
-                        tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
-                        //break;
-                }
-
-        /*
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           5*HZ);
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue)) {
+                memset(&response, 0, len+1);
+                tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
         }
-        */
 
 err:
         return -1;
@@ -207,34 +184,21 @@ static void __exit network_client_exit(void)
         char response[BUFFER_LEN];
         char reply[BUFFER_LEN];
 
-        //DECLARE_WAITQUEUE(exit_wait, current);
         DECLARE_WAIT_QUEUE_HEAD(exit_wait);
 
         memset(&reply, 0, BUFFER_LEN);
         strcat(reply, "ADIOS"); 
-        //tcp_client_send(conn_socket, reply);
         tcp_client_send(conn_socket, reply, strlen(reply), MSG_DONTWAIT);
 
-        //while(1)
-        //{
-                /*
-                tcp_client_receive(conn_socket, response);
-                add_wait_queue(&conn_socket->sk->sk_wq->wait, &exit_wait)
-                */
-         wait_event_timeout(exit_wait,\
-                         !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                                                                        5*HZ);
-        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))
-        {
+        wait_event_timeout(exit_wait,\
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           5*HZ);
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue)) {
                 memset(&response, 0, len+1);
                 tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
-                //remove_wait_queue(&conn_socket->sk->sk_wq->wait, &exit_wait);
         }
 
-        //}
-
-        if(conn_socket != NULL)
-        {
+        if(conn_socket != NULL) {
                 sock_release(conn_socket);
         }
         pr_info(" *** mtp | network client exiting | network_client_exit *** \n");
