@@ -9,14 +9,13 @@
 #include <linux/uaccess.h>
 #include <linux/socket.h>
 #include <linux/slab.h>
+#include "network_comm.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aby Sam Ross, Vincenzo Palazzo");
 
 // FIXME: use a module argument or a modern version to pass this
 #define PORT 2325
-#define BUFFER_SIZE 49
-#define BUFFER_LEN 50
 
 struct socket *conn_socket = NULL;
 
@@ -44,8 +43,8 @@ static int tcp_client_send(struct socket *sock, const char *buf,
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
         /*
-        msg.msg_iov     = &iov;
-        msg.msg_iovlen  = 1;
+          msg.msg_iov     = &iov;
+          msg.msg_iovlen  = 1;
         */
         msg.msg_control = NULL;
         msg.msg_controllen = 0;
@@ -53,8 +52,8 @@ static int tcp_client_send(struct socket *sock, const char *buf,
 
 repeat_send:
         /*
-        msg.msg_iov->iov_len  = left;
-        msg.msg_iov->iov_base = (char *)buf + written; 
+          msg.msg_iov->iov_len  = left;
+          msg.msg_iov->iov_base = (char *)buf + written;
         */
         vec.iov_len = left;
         vec.iov_base = (char *)buf + written;
@@ -62,10 +61,9 @@ repeat_send:
         //len = sock_sendmsg(sock, &msg, left);
         len = kernel_sendmsg(sock, &msg, &vec, left, left);
         if((len == -ERESTARTSYS) || (!(flags & MSG_DONTWAIT) &&\
-                                (len == -EAGAIN)))
+                                     (len == -EAGAIN)))
                 goto repeat_send;
-        if(len > 0)
-        {
+        if(len > 0) {
                 written += len;
                 left -= len;
                 if(left)
@@ -87,15 +85,15 @@ static int tcp_client_receive(struct socket *sock, char *str,
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
         /*
-        msg.msg_iov     = &iov;
-        msg.msg_iovlen  = 1;
+          msg.msg_iov     = &iov;
+          msg.msg_iovlen  = 1;
         */
         msg.msg_control = NULL;
         msg.msg_controllen = 0;
         msg.msg_flags   = flags;
         /*
-        msg.msg_iov->iov_base   = str;
-        msg.msg_ioc->iov_len    = max_size; 
+          msg.msg_iov->iov_base   = str;
+          msg.msg_ioc->iov_len    = max_size;
         */
         vec.iov_len = max_size;
         vec.iov_base = str;
@@ -105,8 +103,7 @@ read_again:
         //len = sock_recvmsg(sock, &msg, max_size, 0); 
         len = kernel_recvmsg(sock, &msg, &vec, max_size, max_size, flags);
 
-        if(len == -EAGAIN || len == -ERESTARTSYS)
-        {
+        if(len == -EAGAIN || len == -ERESTARTSYS) {
                 pr_info(" *** mtp | error while reading: %d | "
                         "tcp_client_receive *** \n", len);
 
@@ -122,13 +119,13 @@ static int tcp_client_connect(void)
 {
         struct sockaddr_in saddr;
         /*
-        struct sockaddr_in daddr;
-        struct socket *data_socket = NULL;
+          struct sockaddr_in daddr;
+          struct socket *data_socket = NULL;
         */
-        unsigned char destip[5] = {10,129,41,200,'\0'};
+        unsigned char destip[5] = {127,0,0,1,'\0'};
         /*
-        char *response = kmalloc(4096, GFP_KERNEL);
-        char *reply = kmalloc(4096, GFP_KERNEL);
+          char *response = kmalloc(4096, GFP_KERNEL);
+          char *reply = kmalloc(4096, GFP_KERNEL);
         */
         int len = BUFFER_SIZE;
         char response[BUFFER_LEN];
@@ -139,8 +136,7 @@ static int tcp_client_connect(void)
         DECLARE_WAIT_QUEUE_HEAD(recv_wait);
         
         ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &conn_socket);
-        if(ret < 0)
-        {
+        if(ret < 0) {
                 pr_info(" *** mtp | Error: %d while creating first socket. | "
                         "setup_connection *** \n", ret);
                 goto err;
@@ -152,9 +148,8 @@ static int tcp_client_connect(void)
         saddr.sin_addr.s_addr = htonl(create_address(destip));
 
         ret = conn_socket->ops->connect(conn_socket, (struct sockaddr *)&saddr\
-                        , sizeof(saddr), O_RDWR);
-        if(ret && (ret != -EINPROGRESS))
-        {
+                                        , sizeof(saddr), O_RDWR);
+        if(ret && (ret != -EINPROGRESS)) {
                 pr_info(" *** mtp | Error: %d while connecting using conn "
                         "socket. | setup_connection *** \n", ret);
                 goto err;
@@ -165,30 +160,12 @@ static int tcp_client_connect(void)
         tcp_client_send(conn_socket, reply, strlen(reply), MSG_DONTWAIT);
 
         wait_event_timeout(recv_wait,\
-                        !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                                                                        5*HZ);
-        /*
-        add_wait_queue(&conn_socket->sk->sk_wq->wait, &recv_wait);
-        while(1)
-        {
-                __set_current_status(TASK_INTERRUPTIBLE);
-                schedule_timeout(HZ);
-        */
-                if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))
-                {
-                        /*
-                        __set_current_status(TASK_RUNNING);
-                        remove_wait_queue(&conn_socket->sk->sk_wq->wait,\
-                                                              &recv_wait);
-                        */
-                        memset(&response, 0, len+1);
-                        tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
-                        //break;
-                }
-
-        /*
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           5*HZ);
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue)) {
+                memset(&response, 0, len+1);
+                tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
         }
-        */
 
 err:
         return -1;
@@ -207,34 +184,21 @@ static void __exit network_client_exit(void)
         char response[BUFFER_LEN];
         char reply[BUFFER_LEN];
 
-        //DECLARE_WAITQUEUE(exit_wait, current);
         DECLARE_WAIT_QUEUE_HEAD(exit_wait);
 
         memset(&reply, 0, BUFFER_LEN);
         strcat(reply, "ADIOS"); 
-        //tcp_client_send(conn_socket, reply);
         tcp_client_send(conn_socket, reply, strlen(reply), MSG_DONTWAIT);
 
-        //while(1)
-        //{
-                /*
-                tcp_client_receive(conn_socket, response);
-                add_wait_queue(&conn_socket->sk->sk_wq->wait, &exit_wait)
-                */
-         wait_event_timeout(exit_wait,\
-                         !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
-                                                                        5*HZ);
-        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue))
-        {
+        wait_event_timeout(exit_wait,\
+                           !skb_queue_empty(&conn_socket->sk->sk_receive_queue),\
+                           5*HZ);
+        if(!skb_queue_empty(&conn_socket->sk->sk_receive_queue)) {
                 memset(&response, 0, len+1);
                 tcp_client_receive(conn_socket, response, MSG_DONTWAIT);
-                //remove_wait_queue(&conn_socket->sk->sk_wq->wait, &exit_wait);
         }
 
-        //}
-
-        if(conn_socket != NULL)
-        {
+        if(conn_socket != NULL) {
                 sock_release(conn_socket);
         }
         pr_info(" *** mtp | network client exiting | network_client_exit *** \n");
@@ -242,3 +206,121 @@ static void __exit network_client_exit(void)
 
 module_init(network_client_init)
 module_exit(network_client_exit)
+/*
+ * This is another more clean version of the code.
+ *
+ *
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+
+#include <linux/kthread.h>
+#include <linux/mutex.h>
+#include <linux/semaphore.h>
+
+#include <linux/delay.h>
+#include <linux/errno.h>
+#include <linux/types.h>
+
+#include <linux/netdevice.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+
+#define _bswap_16(x) ((unsigned short)(_builtin_bswap32(x) >> 16))
+
+MODULE_LICENSE("Dual BSD/GPL");
+
+#define PORT 8089
+#define SERVER_ADDR "127.0.0.1"
+
+struct task_struct *kthread = NULL;
+struct mutex mutex;
+struct socket *sock = NULL;
+
+static char *init_msg = "Init message";
+static int  size_init_msg = 13;
+static char *exit_msg = "Exit message";
+static int  size_exit_msg = 13;
+
+static void convert_from_addr(const char *addr, unsigned char nbs[4])
+{
+    int i;
+    int value;
+    int pos;
+
+    for (i = 0, pos = 0; addr[i] && pos < 4; ++i)
+    {
+        for (value = 0; addr[i] && addr[i] != '.'; ++i) {
+            value *= 10;
+            value += addr[i] - '0';
+        }
+        nbs[pos++] = value;
+        if (!addr[i])
+            return;
+    }
+}
+
+static int send_msg(unsigned char *buf, int len)
+{
+    struct msghdr msg = {0};
+    struct iovec iov;
+    int size = 0;
+
+    iov.iov_base = buf;
+    iov.iov_len = len;
+
+    size = sock_sendmsg(sock, &msg);
+    if (size < 0)
+        printk("thug_write_to_socket: sock_sendmsg error: %d\n", size);
+
+    return size;
+}
+
+static int my_connect(struct socket **s, const char *s_addr)
+{
+    struct sockaddr_in address = {0};
+    int len = sizeof(struct sockaddr_in), ret;
+    unsigned char i_addr[4] = {0};
+    if ((ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, s)) < 0)
+    {
+        printk("echo_server: sock_create error");
+        return ret;
+    }
+    convert_from_addr(s_addr, i_addr);
+    address.sin_addr.s_addr = *(unsigned int*)i_addr;
+    address.sin_port = htons(PORT);
+    address.sin_family = AF_INET;
+    if ((ret = (*s)->ops->connect(sock, (struct sockaddr*)&address, len, 0)) < 0) {
+        printk("echo_server: sock_connect error");
+        sock_release(*s);
+        *s = NULL;
+    }
+    return ret;
+}
+
+static int echo_server_init(void)
+{
+    int ret;
+
+    if ((ret = my_connect(&sock, "127.0.0.1")) < 0) {
+        printk("echo_server: connect error");
+        return ret;
+    }
+    printk(KERN_ALERT "echo-server is on !\n");
+    send_msg(init_msg, size_init_msg);
+    return 0;
+}
+
+static void echo_server_exit(void)
+{
+    send_msg(exit_msg, size_exit_msg);
+    if (sock != NULL) {
+        sock_release(sock);
+        sock = NULL;
+    }
+    printk(KERN_ALERT "echo-server is now ending\n");
+}
+
+module_init(echo_server_init);
+module_exit(echo_server_exit);
+*/
