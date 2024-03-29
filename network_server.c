@@ -58,7 +58,7 @@ struct tcp_server_service
 
 struct tcp_server_service *tcp_server;
 
-char *inet_ntoa(struct in_addr *in)
+static char *inet_ntoa(struct in_addr *in)
 {
         char *str_ip = NULL;
         u_int32_t int_ip = 0;
@@ -78,7 +78,7 @@ char *inet_ntoa(struct in_addr *in)
         return str_ip;
 }
 
-int tcp_server_send(struct socket *sock, int id, const char *buf,\
+static int tcp_server_send(struct socket *sock, int id, const char *buf,\
                 const size_t length, unsigned long flags)
 {
         struct msghdr msg;
@@ -117,7 +117,7 @@ repeat_send:
         return written?written:len;
 }
 
-int tcp_server_receive(struct socket *sock, int id,struct sockaddr_in *address,\
+static int tcp_server_receive(struct socket *sock, int id,struct sockaddr_in *address,\
                 unsigned char *buf,int size, unsigned long flags)
 {
         struct msghdr msg;
@@ -173,7 +173,7 @@ read_again:
         return len;
 }
 
-int connection_handler(void *data)
+static int connection_handler(void *data)
 {
        struct tcp_conn_handler_data *conn_data = 
                (struct tcp_conn_handler_data *)data;
@@ -308,7 +308,7 @@ out:
        do_exit(0);
 }
 
-int tcp_server_accept(void)
+static int tcp_server_accept(void)
 {
         int accept_err = 0;
         struct socket *socket;
@@ -552,7 +552,7 @@ err:
        do_exit(0);
 }
 
-int tcp_server_listen(void)
+static int tcp_server_listen(void)
 {
         int server_err;
         struct socket *conn_socket;
@@ -641,7 +641,7 @@ err:
         do_exit(0);
 }
 
-int tcp_server_start(void)
+static int tcp_server_start(void)
 {
         tcp_server->running = 1;
         tcp_server->thread = kthread_run((void *)tcp_server_listen, NULL,\

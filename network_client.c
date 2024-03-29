@@ -1,29 +1,30 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
-
 #include <linux/net.h>
 #include <net/sock.h>
 #include <linux/tcp.h>
 #include <linux/in.h>
-#include <asm/uaccess.h>
+#include <linux/mm.h>
+#include <linux/uaccess.h>
 #include <linux/socket.h>
 #include <linux/slab.h>
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Aby Sam Ross");
+MODULE_AUTHOR("Aby Sam Ross, Vincenzo Palazzo");
 
+// FIXME: use a module argument or a modern version to pass this
 #define PORT 2325
+#define BUFFER_SIZE 49
+#define BUFFER_LEN 50
 
 struct socket *conn_socket = NULL;
 
-u32 create_address(u8 *ip)
+static u32 create_address(u8 *ip)
 {
         u32 addr = 0;
-        int i;
 
-        for(i=0; i<4; i++)
-        {
+        for(int i = 0; i < 4; i++) {
                 addr += ip[i];
                 if(i==3)
                         break;
@@ -32,14 +33,13 @@ u32 create_address(u8 *ip)
         return addr;
 }
 
-int tcp_client_send(struct socket *sock, const char *buf, const size_t length,\
-                unsigned long flags)
+static int tcp_client_send(struct socket *sock, const char *buf,
+                           const size_t length, unsigned long flags)
 {
         struct msghdr msg;
         //struct iovec iov;
         struct kvec vec;
         int len, written = 0, left = length;
-        mm_segment_t oldmm;
 
         msg.msg_name    = 0;
         msg.msg_namelen = 0;
@@ -51,7 +51,6 @@ int tcp_client_send(struct socket *sock, const char *buf, const size_t length,\
         msg.msg_controllen = 0;
         msg.msg_flags   = flags;
 
-        oldmm = get_fs(); set_fs(KERNEL_DS);
 repeat_send:
         /*
         msg.msg_iov->iov_len  = left;
@@ -72,12 +71,11 @@ repeat_send:
                 if(left)
                         goto repeat_send;
         }
-        set_fs(oldmm);
         return written ? written:len;
 }
 
-int tcp_client_receive(struct socket *sock, char *str,\
-                        unsigned long flags)
+static int tcp_client_receive(struct socket *sock, char *str,
+                              unsigned long flags)
 {
         //mm_segment_t oldmm;
         struct msghdr msg;
@@ -117,11 +115,10 @@ read_again:
 
 
         pr_info(" *** mtp | the server says: %s | tcp_client_receive *** \n", str);
-        //set_fs(oldmm);
         return len;
 }
 
-int tcp_client_connect(void)
+static int tcp_client_connect(void)
 {
         struct sockaddr_in saddr;
         /*
@@ -133,9 +130,9 @@ int tcp_client_connect(void)
         char *response = kmalloc(4096, GFP_KERNEL);
         char *reply = kmalloc(4096, GFP_KERNEL);
         */
-        int len = 49;
-        char response[len+1];
-        char reply[len+1];
+        int len = BUFFER_SIZE;
+        char response[BUFFER_LEN];
+        char reply[BUFFER_LEN];
         int ret = -1;
 
         //DECLARE_WAITQUEUE(recv_wait, current);
@@ -206,14 +203,14 @@ static int __init network_client_init(void)
 
 static void __exit network_client_exit(void)
 {
-        int len = 49;
-        char response[len+1];
-        char reply[len+1];
+        int len = BUFFER_SIZE;
+        char response[BUFFER_LEN];
+        char reply[BUFFER_LEN];
 
         //DECLARE_WAITQUEUE(exit_wait, current);
         DECLARE_WAIT_QUEUE_HEAD(exit_wait);
 
-        memset(&reply, 0, len+1);
+        memset(&reply, 0, BUFFER_LEN);
         strcat(reply, "ADIOS"); 
         //tcp_client_send(conn_socket, reply);
         tcp_client_send(conn_socket, reply, strlen(reply), MSG_DONTWAIT);
