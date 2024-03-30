@@ -4,7 +4,6 @@
 *.obj
 *.elf
 *.cmd
-
 # Precompiled Headers
 *.gch
 *.pch
@@ -43,3 +42,9 @@
 *.log
 *.mod.c
 *.swp
+*.mod
+*.symvers
+
+# editor
+.cache
+compile_commands.json

@@ -1,8 +1,16 @@
-obj-m += network_client.o 
-obj-m += network_server.o 
+ifneq ($(KERNELRELEASE),)
+	obj-m += network_client.o
+	obj-m += network_server.o
+# Otherwise we were called directly from the command
+# line; invoke the kernel build system.
+else
+	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+	PWD := $(shell pwd)
 
-all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+default:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	rm *.ko *.o *order *symvers *.mod *.mod.c .network_*.o
 
+endif
